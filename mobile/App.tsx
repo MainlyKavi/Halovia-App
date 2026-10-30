@@ -5,6 +5,7 @@ import { DeviationBanner, SosOverlay, ToastHost } from "./components/Overlays";
 import { ShareSheet } from "./components/ShareSheet";
 import { vibrate } from "./native";
 import { BookedScreen } from "./screens/BookedScreen";
+import { ChatScreen } from "./screens/ChatScreen";
 import { ContactScreen } from "./screens/ContactScreen";
 import { EmergencyScreen } from "./screens/EmergencyScreen";
 import { GroupScreen } from "./screens/GroupScreen";
@@ -93,9 +94,9 @@ function Shell() {
 
   const content = {
     home: <HomeScreen />, emergency: <EmergencyScreen />, ride: <TrackingScreen />, group: <GroupScreen />, settings: <SettingsScreen />,
-    booked: <BookedScreen />, script: <ScriptScreen />, contact: <ContactScreen />, rapido: <RapidoDemoScreen />,
+    booked: <BookedScreen />, script: <ScriptScreen />, contact: <ContactScreen />, rapido: <RapidoDemoScreen />, chat: <ChatScreen />,
   }[screen];
-  const fullScreen = screen === "contact" || screen === "rapido";
+  const fullScreen = screen === "contact" || screen === "rapido" || screen === "chat";
   const showTabs = role === "rider" && !fullScreen;
   const activeTab = screen === "booked" ? "ride" : screen === "script" || screen === "group" ? "home" : screen;
 

@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { buildDeviationAlert, buildSosAlert, formatDistance, type SafetyAlert } from "@/lib/ride/alerts";
 import { DEFAULT_DEVIATION_CONFIG, evaluateDeviation, INITIAL_DEVIATION_STATE, type DeviationState } from "@/lib/ride/deviation";
 import type { LatLng } from "@/lib/ride/geo";
-import { DEMO_MEMBERS, reconcileSelection, removeMember, summarizeViewers, upsertMember, type GroupMember } from "@/lib/ride/group";
+import { appendMessage, isChatLog, seedChat, type ChatLog } from "@/lib/ride/chat";
+import { DEMO_MEMBERS, isGroupId, recipientsForGroups, reconcileSelection, removeMember, summarizeViewers, upsertMember, type GroupId, type GroupMember } from "@/lib/ride/group";
 import { FIXED_NEAREST } from "@/lib/ride/places";
 import { DEMO_PICKUP, MockRideProvider, type RideBrand, type RideDetails, type RideProvider } from "@/lib/ride/ride-provider";
 import { FALLBACK_PLANNED_ROUTE, fetchPlannedRoute, type PlannedRoute } from "@/lib/ride/route";
@@ -13,11 +14,11 @@ import { publishSnapshot, readSnapshot, subscribeSnapshot, clearSnapshot, type S
 
 export type Theme = "pink" | "light" | "dark";
 export type Speed = "realistic" | "fast" | "veryFast";
-export type Screen = "home" | "emergency" | "ride" | "group" | "settings" | "booked" | "script" | "contact" | "rapido";
+export type Screen = "home" | "emergency" | "ride" | "group" | "settings" | "booked" | "script" | "contact" | "rapido" | "chat";
 
 /** Simulated cab speed in metres per second. "Realistic" is ~40 km/h city traffic. */
 export const SPEEDS: Record<Speed, number> = { realistic: 11, fast: 45, veryFast: 110 };
-export const SOS_COUNTDOWN_MS = 5_000;
+export const SOS_COUNTDOWN_MS = 3_000;
 export const DEVIATION_OPTIONS = [150, 300, 500] as const;
 
 export interface Settings {
@@ -44,7 +45,8 @@ export type SosState =
 export interface Session {
   version: 1;
   ride: RideDetails | null;
-  sharing: { recipientIds: string[]; startedAt: number } | null;
+  /** groupIds is missing on sessions saved before groups existed. */
+  sharing: { recipientIds: string[]; startedAt: number; groupIds?: GroupId[] } | null;
   route: PlannedRoute | null;
   simulation: CabSimulation;
   deviation: DeviationState;
@@ -59,7 +61,10 @@ export interface Session {
 }
 
 const SETTINGS_KEY = "halovia.ride.settings.v1";
-const MEMBERS_KEY = "halovia.ride.members.v1";
+// v2: members carry a group. Older saved lists are replaced by the demo groups.
+const MEMBERS_KEY = "halovia.ride.members.v2";
+// The group chat lasts for the browser session only (prototype).
+const CHAT_KEY = "halovia.ride.chat.v1";
 const SESSION_KEY = "halovia.ride.session.v1";
 
 function providerFor(brand: RideBrand): RideProvider {
@@ -87,6 +92,14 @@ function read<T>(key: string, valid: (value: unknown) => value is T): T | null {
 
 function write(key: string, value: unknown): void {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Storage blocked or full: keep running in memory. */ }
+}
+
+function readChat(): ChatLog {
+  try {
+    const value: unknown = JSON.parse(sessionStorage.getItem(CHAT_KEY) ?? "null");
+    if (isChatLog(value)) return value;
+  } catch { /* Fall through to the seeded chat. */ }
+  return seedChat(Date.now());
 }
 
 const isVersioned = (value: unknown): value is { version: 1 } => Boolean(value) && typeof value === "object" && (value as { version?: unknown }).version === 1;
@@ -133,7 +146,12 @@ interface SafetyContextValue {
   nearest: typeof FIXED_NEAREST;
   snapshot: SharedSnapshot | null;
   changeBrand: (brand: RideBrand) => void;
-  startSharing: (recipientIds: string[]) => Promise<void>;
+  /** Shares the ride with everyone in the chosen groups, and no one else. */
+  startSharing: (groupIds: GroupId[]) => Promise<void>;
+  chat: ChatLog;
+  chatGroupId: GroupId;
+  openChat: (groupId: GroupId) => void;
+  sendChatMessage: (groupId: GroupId, senderId: string, text: string) => void;
   endRide: () => void;
   simulateWrongTurn: () => void;
   triggerSos: () => void;
@@ -160,6 +178,11 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
   const [gpsEnabled, setGpsEnabled] = useState(false);
   const [toast, setToast] = useState<ToastMessage | null>(null);
+  const [chat, setChat] = useState<ChatLog>(readChat);
+  const [chatGroupId, setChatGroupId] = useState<GroupId>(() => {
+    const saved = (window.history.state as { chatGroupId?: unknown } | null)?.chatGroupId;
+    return isGroupId(saved) ? saved : "family";
+  });
   const [remoteSnapshot, setRemoteSnapshot] = useState<SharedSnapshot | null>(() => (role === "contact" ? readSnapshot() : null));
 
   const settingsRef = useRef(settings);
@@ -168,6 +191,7 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
   useEffect(() => { settingsRef.current = settings; write(SETTINGS_KEY, settings); }, [settings]);
   useEffect(() => { membersRef.current = members; write(MEMBERS_KEY, members); }, [members]);
   useEffect(() => { gpsRef.current = gps; }, [gps]);
+  useEffect(() => { try { sessionStorage.setItem(CHAT_KEY, JSON.stringify(chat)); } catch { /* Keep the chat in memory. */ } }, [chat]);
 
   /** Every session change goes through here so timers never act on stale state. */
   const mutate = useCallback((update: (current: Session) => Session) => {
@@ -273,7 +297,7 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
     });
   }, [mutate, recipientsFor]);
 
-  // SOS countdown: fires once the 5 second cancel window passes.
+  // SOS countdown: fires once the 3 second cancel window passes.
   useEffect(() => {
     if (role !== "rider" || session.sos.phase !== "countdown") return;
     const timer = window.setTimeout(activateSos, Math.max(0, session.sos.endsAt - Date.now()));
@@ -294,7 +318,13 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
 
   const updateSettings = useCallback((patch: Partial<Settings>) => setSettings((current) => ({ ...current, ...patch })), []);
 
-  const saveMember = useCallback((member: GroupMember) => setMembers((current) => upsertMember(current, member)), []);
+  // A member added to (or moved out of) a group the ride is shared with gains (or loses) access.
+  const saveMember = useCallback((member: GroupMember) => {
+    const next = upsertMember(membersRef.current, member);
+    membersRef.current = next;
+    setMembers(next);
+    mutate((s) => (s.sharing?.groupIds ? { ...s, sharing: { ...s.sharing, recipientIds: recipientsForGroups(next, s.sharing.groupIds) } } : s));
+  }, [mutate]);
   const deleteMember = useCallback((id: string) => {
     const next = removeMember(membersRef.current, id);
     membersRef.current = next;
@@ -307,11 +337,12 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
     void providerFor(brand).getActiveRide().then((ride) => mutate((current) => (current.sharing ? current : { ...current, ride })));
   }, [mutate, updateSettings]);
 
-  const startSharing = useCallback(async (recipientIds: string[]) => {
+  const startSharing = useCallback(async (groupIds: GroupId[]) => {
+    const recipientIds = recipientsForGroups(membersRef.current, groupIds);
     const ride = sessionRef.current.ride;
     if (!ride || !recipientIds.length) return;
     const planned = await fetchPlannedRoute(ride.pickup.location, ride.drop.location);
-    mutate((current) => ({ ...current, route: planned, sharing: { recipientIds, startedAt: Date.now() }, simulation: INITIAL_SIMULATION, deviation: INITIAL_DEVIATION_STATE, arrivedAt: null, riderDeviationAlertId: null }));
+    mutate((current) => ({ ...current, route: planned, sharing: { recipientIds, groupIds, startedAt: Date.now() }, simulation: INITIAL_SIMULATION, deviation: INITIAL_DEVIATION_STATE, arrivedAt: null, riderDeviationAlertId: null }));
     void vibrate("tap");
     enableGps(true);
     const language = settingsRef.current.language;
@@ -355,6 +386,8 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
     const keepTheme = settingsRef.current.theme;
     setSettings({ ...defaultSettings(), language: keepLanguage, theme: keepTheme, onboarded: true });
     setMembers(DEMO_MEMBERS);
+    membersRef.current = DEMO_MEMBERS;
+    setChat(seedChat(Date.now()));
     clearSnapshot();
     mutate(() => emptySession(null));
     void providerFor("rapido").getActiveRide().then((ride) => mutate((current) => ({ ...current, ride })));
@@ -369,12 +402,25 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
     if ((window.history.state as { screen?: Screen } | null)?.screen !== next) window.history.pushState({ screen: next }, "");
     window.scrollTo({ top: 0, behavior: "instant" });
   }, []);
+
+  const openChat = useCallback((groupId: GroupId) => {
+    setChatGroupId(groupId);
+    setShareSheetOpen(false);
+    setScreen("chat");
+    window.history.pushState({ screen: "chat", chatGroupId: groupId }, "");
+    window.scrollTo({ top: 0, behavior: "instant" });
+  }, []);
+  const sendChatMessage = useCallback((groupId: GroupId, senderId: string, text: string) => {
+    setChat((current) => appendMessage(current, { id: `msg-${Date.now().toString(36)}-${(alertCounter += 1)}`, groupId, senderId, text, at: Date.now() }));
+  }, []);
   useEffect(() => {
     const home: Screen = role === "contact" ? "contact" : "home";
     if (!(window.history.state as { screen?: Screen } | null)?.screen) window.history.replaceState({ screen: home }, "");
     const onPop = (event: PopStateEvent) => {
       setShareSheetOpen(false);
-      setScreen((event.state as { screen?: Screen } | null)?.screen ?? home);
+      const state = event.state as { screen?: Screen; chatGroupId?: unknown } | null;
+      if (isGroupId(state?.chatGroupId)) setChatGroupId(state.chatGroupId);
+      setScreen(state?.screen ?? home);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
@@ -383,9 +429,9 @@ export function SafetyProvider({ role, children }: { role: "rider" | "contact"; 
   const value = useMemo<SafetyContextValue>(() => ({
     role, settings, updateSettings, members, saveMember, deleteMember, t, locale, screen, navigate, shareSheetOpen, setShareSheetOpen,
     session, cab, remaining, etaMinutes, location, gps, gpsStatus, setGpsEnabled: enableGps, nearest, snapshot, changeBrand, startSharing, endRide,
-    simulateWrongTurn, triggerSos, cancelSos, stopSos, silenceSiren, dismissDeviation, acknowledgeAlert, resetDemo, toast, showToast,
+    chat, chatGroupId, openChat, sendChatMessage, simulateWrongTurn, triggerSos, cancelSos, stopSos, silenceSiren, dismissDeviation, acknowledgeAlert, resetDemo, toast, showToast,
   }), [role, settings, updateSettings, members, saveMember, deleteMember, t, locale, screen, navigate, shareSheetOpen, session, cab, remaining, etaMinutes,
-    location, gps, gpsStatus, enableGps, nearest, snapshot, changeBrand, startSharing, endRide, simulateWrongTurn, triggerSos, cancelSos, stopSos,
+    location, gps, gpsStatus, enableGps, nearest, snapshot, changeBrand, startSharing, endRide, chat, chatGroupId, openChat, sendChatMessage, simulateWrongTurn, triggerSos, cancelSos, stopSos,
     silenceSiren, dismissDeviation, acknowledgeAlert, resetDemo, toast, showToast]);
 
   return <SafetyContext.Provider value={value}>{children}</SafetyContext.Provider>;

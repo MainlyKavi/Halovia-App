@@ -190,7 +190,7 @@ Before you start: both phones charged, on **mobile data or a phone hotspot** (ca
 | --- | --- | --- |
 | 0:00 | Show both phones on Trusted group | "Shreya's phone and Kavi's phone are paired with an invite code. Both show Alerts on." |
 | 0:15 | Lock Phone B, put it face up | "Kavi isn't using his phone. It's locked." |
-| 0:20 | Phone A: hold **HELP** for 2 s | "Hold or double-tap, so it can't fire by accident." The 5-second countdown appears: "She can still cancel." |
+| 0:20 | Phone A: hold **HELP** for 2 s | "Hold or double-tap, so it can't fire by accident." The 3-second countdown appears: "She can still cancel." |
 | 0:30 | Let it reach zero | Phone A: **SOS active → Sent**. Phone B lights up with a full-screen alarm. Phone A: **Delivered to Kavi**. |
 | 0:45 | Pick up Phone B, open the alert | Map with Shreya's live position, "Updated 3s ago". Phone A: **Seen by Kavi**. |
 | 1:00 | Walk a few steps with Phone A (or let the simulated cab move) | The red marker moves on Phone B every few seconds. |

@@ -15,11 +15,11 @@ Each step below also has a **Run** button on the in-app **Demo script** screen (
 
 > "When a woman takes a cab alone, the people who care about her can't see where she is or know when something goes wrong. Halovia fixes that."
 
-Show the **Home** screen: "Connected with Rapido", the map, the HELP button, "Dad, Kavi +1 can view this journey" and the emergency helplines.
+Show the **Home** screen: "Connected with Rapido", the map, "Dad, Kavi +3 can view this journey" right under it, the HELP button, and the Emergency numbers link.
 
 ### 0:15 — Trusted group (20 s)
 
-Tap the **Group** card on Home. Four people are already set up: Dad, Kavi, Niara and Milan.
+Tap the **Group** card on Home. Three groups are already set up: **Family** (Dad, Kavi, Mom, Aarav, Meera), **Friends** and **Colleagues**. Each has a **Group chat**; "Send as" lets you post as any member for the demo.
 
 > "You choose who you trust. You can add, edit or remove people here."
 
@@ -35,7 +35,7 @@ Tap the **settings gear → Rapido (demo)**. This is a generic, unbranded ride-a
 
 ### 1:00 — Share with Halovia (20 s)
 
-Tap **Share with Halovia**. Halovia opens with the ride active, the toast "Journey shared with Dad, Kavi +1", and the group card "Dad, Kavi +1 can view this journey" (Dad, Kavi and Niara).
+Tap **Share with Halovia**. The **Share this ride** picker opens with Family selected; add Friends or Colleagues if you like. Halovia opens with the ride active, the toast "Journey shared with Dad, Kavi +3", and "Dad, Kavi +3 can view this journey · Shared with Family". Only people in the picked groups can see the ride.
 
 > "One tap, and her trusted people can follow the ride: live location, driver, plate and the full route."
 
@@ -59,11 +59,11 @@ Tap **I'm OK**.
 
 ### 2:05 — SOS (25 s)
 
-Go to **Home**. **Press and hold** the HELP button for 2 seconds (or double-tap). Point out the fill bar and the **5-second cancel** countdown.
+Go to **Home**. **Press and hold** the HELP button for 2 seconds (or double-tap). Point out the fill bar and the **3-second cancel** countdown.
 
 When it fires: full red screen, siren, strong vibration. It shows who was alerted and the nearest police station and hospital.
 
-> "Hold-to-trigger avoids pocket presses, and there's a 5-second window to cancel. In demo mode no real call is placed."
+> "Hold-to-trigger avoids pocket presses, and there's a 3-second window to cancel. In demo mode no real call is placed."
 
 ### 2:30 — What the contact sees (25 s)
 

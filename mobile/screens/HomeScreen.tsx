@@ -3,7 +3,7 @@ import { useMemo } from "react";
 import { Avatar } from "@/components/ui/Primitives";
 import { formatDistance } from "@/lib/ride/alerts";
 import { bearingDegrees, destinationPoint } from "@/lib/ride/geo";
-import { defaultRecipients, summarizeViewers } from "@/lib/ride/group";
+import { DEFAULT_GROUP_IDS, GROUP_IDS, groupOf, recipientsForGroups, summarizeViewers } from "@/lib/ride/group";
 import { brandLabel } from "@/lib/ride/ride-provider";
 import { FALLBACK_PLANNED_ROUTE } from "@/lib/ride/route";
 import { LiveMap } from "../components/LiveMap";
@@ -12,17 +12,20 @@ import { SosButton } from "../components/SosButton";
 import { useSafety } from "../state";
 
 /**
- * Home, in priority order: HELP, then the journey (status and map), then who
- * can view it. Helplines live on the Emergency tab; presenter tools are
- * hidden unless switched on by long-pressing the logo.
+ * Home, top to bottom: the journey (status and map), who can view it, HELP,
+ * then the emergency numbers link. Helplines live on the Emergency tab;
+ * presenter tools are hidden unless switched on by long-pressing the logo.
  */
 export function HomeScreen() {
   const { t, settings, session, members, navigate, triggerSos, remaining, cab, gps, nearest } = useSafety();
   const { ride, sharing } = session;
   const route = session.route?.points ?? FALLBACK_PLANNED_ROUTE.points;
-  const viewerIds = sharing?.recipientIds ?? defaultRecipients(members);
+  // Before a ride is shared this previews the default groups; after, it is exactly who was shared with.
+  const viewerIds = sharing?.recipientIds ?? recipientsForGroups(members, DEFAULT_GROUP_IDS);
   const viewers = members.filter((member) => viewerIds.includes(member.id));
   const names = summarizeViewers(viewers.map((member) => member.name), { pair: t("home.viewersPair"), more: t("home.viewersMore") });
+  const groupIds = sharing ? sharing.groupIds ?? GROUP_IDS.filter((id) => viewers.some((member) => groupOf(member) === id)) : DEFAULT_GROUP_IDS;
+  const groupNames = groupIds.map((id) => t(`group.${id}`)).join(", ");
   // Before sharing, the booked cab is shown a short way off, heading to the pickup.
   const approach = bearingDegrees(route[0], route[Math.min(8, route.length - 1)]);
   const waitingCab = useMemo(() => (ride ? { point: destinationPoint(route[0], (approach + 200) % 360, 450), bearing: (approach + 20) % 360 } : null), [approach, ride, route]);
@@ -31,8 +34,6 @@ export function HomeScreen() {
 
   return (
     <div className="m-screen m-home">
-      <SosButton label={t("home.help")} hint={t("home.sosHint")} ariaLabel={t("sos.button")} disabled={session.sos.phase !== "idle"} onTrigger={triggerSos} />
-
       {ride && (
         <section className="m-journey" aria-label={status}>
           <button type="button" className="m-journey-head" onClick={() => navigate(sharing ? "ride" : "booked")}>
@@ -61,9 +62,14 @@ export function HomeScreen() {
 
       <button type="button" className="m-viewers" onClick={() => navigate("group")}>
         <span className="m-avatar-stack" aria-hidden="true">{viewers.slice(0, 3).map((member) => <Avatar key={member.id} initials={member.initials} color={member.color} size="sm" />)}</span>
-        <span className="m-viewers-text">{names ? t("home.canSee", { names }) : t("home.noViewers")}</span>
+        <span className="m-viewers-text">
+          {names ? t("home.canSee", { names }) : t("home.noViewers")}
+          {names && groupNames && <small>{t("home.viewerGroups", { groups: groupNames })}</small>}
+        </span>
         <ChevronRight size={18} aria-hidden="true" />
       </button>
+
+      <SosButton label={t("home.help")} hint={t("home.sosHint")} ariaLabel={t("sos.button")} disabled={session.sos.phase !== "idle"} onTrigger={triggerSos} />
 
       <div className="m-home-links">
         <button type="button" className="m-text-link" onClick={() => navigate("emergency")}><Phone size={16} />{t("home.emergencyNumbers")}</button>

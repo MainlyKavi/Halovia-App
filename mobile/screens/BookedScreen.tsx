@@ -1,13 +1,21 @@
 import { ArrowLeft, Clock3, IndianRupee, KeyRound, ShieldCheck, Star } from "lucide-react";
 import { RIDE_BRANDS } from "@/lib/ride/ride-provider";
 import { brandLabel } from "@/lib/ride/ride-provider";
+import { useMemo } from "react";
+import { bearingDegrees, destinationPoint } from "@/lib/ride/geo";
+import { FALLBACK_PLANNED_ROUTE } from "@/lib/ride/route";
 import { DriverPortrait } from "../components/DriverPortrait";
+import { LiveMap } from "../components/LiveMap";
 import { useSafety } from "../state";
 
 /** Generic cab-app style confirmation for the MOCK ride. No real ride app is involved. */
 export function BookedScreen() {
-  const { t, session, navigate, setShareSheetOpen, changeBrand, settings, locale } = useSafety();
+  const { t, session, navigate, setShareSheetOpen, changeBrand, settings, locale, cab, nearest } = useSafety();
   const ride = session.ride;
+  const route = session.route?.points ?? FALLBACK_PLANNED_ROUTE.points;
+  // Until the ride is shared, the booked cab waits a short way off, heading to the pickup (as on Home).
+  const approach = bearingDegrees(route[0], route[Math.min(8, route.length - 1)]);
+  const waitingCab = useMemo(() => ({ point: destinationPoint(route[0], (approach + 200) % 360, 450), bearing: (approach + 20) % 360 }), [approach, route]);
   if (!ride) return null;
   const sharing = Boolean(session.sharing);
   const number = new Intl.NumberFormat(locale);
@@ -18,6 +26,19 @@ export function BookedScreen() {
         <button type="button" className="icon-button" onClick={() => navigate("home")} aria-label={t("common.back")}><ArrowLeft size={20} /></button>
         <span className="m-brand-tag">{t("ride.via", { brand: brandLabel(ride.brand) })}</span>
       </div>
+
+      <LiveMap
+        className="m-booked-map"
+        route={route}
+        travelledMetres={sharing ? session.simulation.travelledMetres : 0}
+        cab={cab ?? waitingCab}
+        user={sharing ? null : ride.pickup.location}
+        places={nearest}
+        deviated={session.deviation.deviated}
+        dark={settings.theme === "dark"}
+        followCab={sharing}
+        labels={{ you: t("track.you"), recenter: t("track.recenter"), offline: t("track.mapOffline") }}
+      />
 
       <section className="card m-card m-confirm">
         <p className="m-confirm-kicker"><span className="m-live-dot" aria-hidden="true" />{t("ride.confirmed")}</p>
@@ -64,6 +85,7 @@ export function BookedScreen() {
         </section>
       )}
       <p className="m-fineprint">{t("ride.simulatedNote")}</p>
+      <footer className="m-credit">{t("footer.madeBy", { name: "Ravi Goutam" })}</footer>
     </div>
   );
 }

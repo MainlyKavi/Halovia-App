@@ -1,14 +1,15 @@
-import { Pencil, Phone, Plus, Trash2, UsersRound } from "lucide-react";
+import { MessageCircle, Pencil, Phone, Plus, Trash2, UsersRound } from "lucide-react";
 import { useState } from "react";
 import { Avatar } from "@/components/ui/Primitives";
-import type { GroupMember } from "@/lib/ride/group";
+import { GROUP_IDS, membersInGroups, type GroupMember } from "@/lib/ride/group";
 import { MemberEditor } from "../components/MemberEditor";
+import { GROUP_ICONS } from "../components/ShareSheet";
 import { PairingCard } from "../cloud/PairingCard";
 import { Sheet } from "../components/Sheet";
 import { useSafety } from "../state";
 
 export function GroupScreen() {
-  const { t, members, deleteMember, showToast, session } = useSafety();
+  const { t, members, deleteMember, showToast, session, openChat } = useSafety();
   const [editing, setEditing] = useState<GroupMember | "new" | null>(null);
   const [deleting, setDeleting] = useState<GroupMember | null>(null);
 
@@ -29,23 +30,37 @@ export function GroupScreen() {
           <button type="button" className="button button-primary" onClick={() => setEditing("new")}><Plus size={18} />{t("group.add")}</button>
         </div>
       ) : (
-        <ul className="m-members">
-          {members.map((member) => (
-            <li key={member.id} className="card m-member">
-              <Avatar initials={member.initials} color={member.color} size="lg" />
-              <div className="m-member-text">
-                <strong>{member.name}</strong>
-                <small>{member.relation}</small>
-                <span><Phone size={12} />{member.phone}</span>
-              </div>
-              {session.sharing?.recipientIds.includes(member.id) && <span className="m-live-dot" title={t("contact.live")} />}
-              <div className="m-member-actions">
-                <button type="button" className="icon-button" onClick={() => setEditing(member)} aria-label={`${t("common.edit")} ${member.name}`}><Pencil size={17} /></button>
-                <button type="button" className="icon-button" onClick={() => setDeleting(member)} aria-label={`${t("common.delete")} ${member.name}`}><Trash2 size={17} /></button>
-              </div>
-            </li>
-          ))}
-        </ul>
+        GROUP_IDS.map((groupId) => {
+          const people = membersInGroups(members, [groupId]);
+          const Icon = GROUP_ICONS[groupId];
+          const group = t(`group.${groupId}`);
+          return (
+            <section key={groupId} className="m-group-section" aria-labelledby={`group-${groupId}`}>
+              <header className="m-group-section-head">
+                <span className={`m-group-pick-icon m-group-${groupId}`} aria-hidden="true"><Icon size={18} /></span>
+                <span><h2 id={`group-${groupId}`}>{group}</h2><small>{t("group.memberCount", { count: people.length })}</small></span>
+                <button type="button" className="m-chat-link" onClick={() => openChat(groupId)} aria-label={t("share.openChat", { group })}><MessageCircle size={16} />{t("group.openChat")}</button>
+              </header>
+              <ul className="m-members">
+                {people.map((member) => (
+                  <li key={member.id} className="card m-member">
+                    <Avatar initials={member.initials} color={member.color} size="lg" />
+                    <div className="m-member-text">
+                      <strong>{member.name}</strong>
+                      <small>{member.relation}</small>
+                      <span><Phone size={12} />{member.phone}</span>
+                    </div>
+                    {session.sharing?.recipientIds.includes(member.id) && <span className="m-live-dot" title={t("contact.live")} />}
+                    <div className="m-member-actions">
+                      <button type="button" className="icon-button" onClick={() => setEditing(member)} aria-label={`${t("common.edit")} ${member.name}`}><Pencil size={17} /></button>
+                      <button type="button" className="icon-button" onClick={() => setDeleting(member)} aria-label={`${t("common.delete")} ${member.name}`}><Trash2 size={17} /></button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          );
+        })
       )}
 
       <MemberEditor member={editing} onClose={() => setEditing(null)} />

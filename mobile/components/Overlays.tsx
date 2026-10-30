@@ -1,7 +1,7 @@
-import { AlertTriangle, BellOff, Check, Eye, Phone, ShieldCheck, X } from "lucide-react";
+import { AlertTriangle, BellOff, Check, Eye, Phone, ShieldCheck } from "lucide-react";
 import { formatDistance } from "@/lib/ride/alerts";
-import { useNow } from "../hooks";
 import { SOS_COUNTDOWN_MS, useSafety } from "../state";
+import { CountdownOverlay } from "./FullScreen";
 import { openExternal } from "../native";
 import { NearbyPlacesList } from "./NearbyPlaces";
 import { SosDeliveryStatus } from "../cloud/SosDeliveryStatus";
@@ -9,23 +9,19 @@ import { SosDeliveryStatus } from "../cloud/SosDeliveryStatus";
 export function SosOverlay() {
   const { session, t, members, settings, cancelSos, stopSos, silenceSiren, showToast, nearest, navigate } = useSafety();
   const sos = session.sos;
-  const now = useNow(sos.phase === "countdown");
   if (sos.phase === "idle") return null;
 
   if (sos.phase === "countdown") {
-    const left = Math.max(0, sos.endsAt - now);
-    const seconds = Math.ceil(left / 1_000);
-    const ring = 2 * Math.PI * 54;
     return (
-      <div className="m-sos-overlay m-sos-countdown" role="alertdialog" aria-modal="true" aria-labelledby="sos-countdown-title" aria-describedby="sos-countdown-text">
-        <div className="m-countdown-ring" aria-hidden="true">
-          <svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" className="track" /><circle cx="60" cy="60" r="54" className="fill" style={{ strokeDasharray: ring, strokeDashoffset: ring * (1 - left / SOS_COUNTDOWN_MS) }} /></svg>
-          <strong>{seconds}</strong>
-        </div>
-        <h2 id="sos-countdown-title">{t("sos.countdownTitle", { seconds })}</h2>
-        <p id="sos-countdown-text">{t("sos.countdownText")}</p>
-        <button type="button" className="m-sos-cancel" onClick={cancelSos} data-autofocus><X size={20} />{t("sos.cancel")}</button>
-      </div>
+      <CountdownOverlay
+        id="sos-countdown"
+        endsAt={sos.endsAt}
+        durationMs={SOS_COUNTDOWN_MS}
+        title={(seconds) => t("sos.countdownTitle", { seconds })}
+        text={t("sos.countdownText")}
+        cancelLabel={t("sos.cancel")}
+        onCancel={cancelSos}
+      />
     );
   }
 

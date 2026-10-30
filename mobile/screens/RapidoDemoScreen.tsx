@@ -2,7 +2,6 @@ import { ArrowLeft, KeyRound, ShieldCheck, Star } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PICKUP_APPROACH_ROUTE } from "@/lib/ride/fallback-route";
 import { pointAlongPolyline, polylineLengthMetres } from "@/lib/ride/geo";
-import { defaultRecipients } from "@/lib/ride/group";
 import { DriverPortrait } from "../components/DriverPortrait";
 import { LiveMap } from "../components/LiveMap";
 import { SPEEDS, useSafety } from "../state";
@@ -15,10 +14,9 @@ const APPROACH_LENGTH = polylineLengthMetres(PICKUP_APPROACH_ROUTE);
  * wordmark of any real company). Its button hands the ride to Halovia.
  */
 export function RapidoDemoScreen() {
-  const { t, session, members, settings, startSharing, navigate, locale } = useSafety();
+  const { t, session, settings, setShareSheetOpen, navigate, locale } = useSafety();
   const ride = session.ride;
   const [travelled, setTravelled] = useState(0);
-  const [busy, setBusy] = useState(false);
 
   // The cab drives toward the pickup at city speed, then waits there.
   useEffect(() => {
@@ -32,12 +30,10 @@ export function RapidoDemoScreen() {
   const sharing = Boolean(session.sharing);
   const money = new Intl.NumberFormat(locale, { style: "currency", currency: "INR", maximumFractionDigits: 0 });
 
-  const share = async () => {
-    if (sharing) { navigate("home"); return; }
-    setBusy(true);
-    await startSharing(defaultRecipients(members));
-    setBusy(false);
-    navigate("home");
+  // The group picker decides who sees the ride; it returns to Home when done.
+  const share = () => {
+    if (sharing) navigate("home");
+    else setShareSheetOpen(true);
   };
 
   return (
@@ -87,7 +83,7 @@ export function RapidoDemoScreen() {
         <div className="m-ridehail-fare"><small>{t("ride.fare")}</small><strong>{money.format(ride.fareInr)}</strong></div>
       </section>
 
-      <button type="button" className="button button-primary button-lg m-block m-share-button" disabled={busy} onClick={() => void share()}>
+      <button type="button" className="button button-primary button-lg m-block m-share-button" onClick={share}>
         <ShieldCheck size={20} />{sharing ? t("ride.alreadyShared") : t("ride.shareCta")}
       </button>
       <p className="m-fineprint">{t("ride.simulatedNote")}</p>

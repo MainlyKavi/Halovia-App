@@ -4,7 +4,8 @@ import { buildDeviationAlert, buildSosAlert, directionsLink, formatAlertText, fo
 import { DEFAULT_DEVIATION_CONFIG, evaluateDeviation, INITIAL_DEVIATION_STATE, type DeviationState } from "./deviation.ts";
 import { FALLBACK_ROUTE, FALLBACK_ROUTE_DISTANCE_METRES, PICKUP_APPROACH_ROUTE } from "./fallback-route.ts";
 import { destinationPoint, distanceToPolylineMetres, haversineMetres, pointAlongPolyline, polylineLengthMetres, projectOntoPolyline, slicePolyline, type LatLng } from "./geo.ts";
-import { DEMO_MEMBERS, defaultRecipients, initialsFor, summarizeViewers, reconcileSelection, removeMember, toggleSelection, upsertMember, validateMember } from "./group.ts";
+import { appendMessage, isChatLog, ME, seedChat } from "./chat.ts";
+import { DEFAULT_GROUP_IDS, DEMO_MEMBERS, defaultRecipients, groupOf, initialsFor, isGroupId, membersInGroups, recipientsForGroups, summarizeViewers, reconcileSelection, removeMember, toggleSelection, upsertMember, validateMember } from "./group.ts";
 import { buildOverpassQuery, FIXED_HOSPITAL, FIXED_NEAREST, FIXED_POLICE, FIXED_SAFETY_PLACES, fetchSafetyPlaces, nearestSafetyPlaces, parseOverpassResponse, placesCacheKey, type KeyValueStore } from "./places.ts";
 import { createMockRide, DEMO_DROP, DEMO_PICKUP, MockRideProvider } from "./ride-provider.ts";
 import { FALLBACK_PLANNED_ROUTE, fetchPlannedRoute, parseOsrmResponse } from "./route.ts";
@@ -164,18 +165,36 @@ test("trusted group helpers validate, upsert and keep selections in sync", () =>
   assert.deepEqual(validateMember({ name: "A", phone: "+91 (900) 000-0001" }), []);
   assert.deepEqual(validateMember({ name: "A", phone: "call me" }), ["phoneInvalid"]);
 
-  const added = upsertMember(DEMO_MEMBERS, { id: "new", name: "  New Member ", phone: "+91 90000 00009", relation: "Aunt", initials: "", color: "#000" });
-  assert.equal(added.length, 5);
-  assert.equal(added[4].name, "New Member");
-  assert.equal(added[4].initials, "NM");
-  const edited = upsertMember(added, { ...added[4], name: "New M" });
-  assert.equal(edited.length, 5);
-  assert.equal(edited[4].name, "New M");
+  const count = DEMO_MEMBERS.length;
+  const added = upsertMember(DEMO_MEMBERS, { id: "new", name: "  New Member ", phone: "+91 90000 00099", relation: "Aunt", initials: "", color: "#000" });
+  assert.equal(added.length, count + 1);
+  assert.equal(added[count].name, "New Member");
+  assert.equal(added[count].initials, "NM");
+  const edited = upsertMember(added, { ...added[count], name: "New M" });
+  assert.equal(edited.length, count + 1);
+  assert.equal(edited[count].name, "New M");
 
-  const selection = toggleSelection(toggleSelection([], "new"), "member-niara");
-  assert.deepEqual(selection, ["new", "member-niara"]);
-  assert.deepEqual(toggleSelection(selection, "new"), ["member-niara"]);
-  assert.deepEqual(reconcileSelection(selection, removeMember(edited, "new")), ["member-niara"]);
+  const selection = toggleSelection(toggleSelection([], "new"), "member-isha");
+  assert.deepEqual(selection, ["new", "member-isha"]);
+  assert.deepEqual(toggleSelection(selection, "new"), ["member-isha"]);
+  assert.deepEqual(reconcileSelection(selection, removeMember(edited, "new")), ["member-isha"]);
+});
+
+test("groups decide who a shared ride is visible to", () => {
+  const family = recipientsForGroups(DEMO_MEMBERS, ["family"]);
+  assert.deepEqual(family, ["member-dad", "member-kavi", "member-mom", "member-aarav", "member-meera"]);
+  // Kavi and Dad are in Family only.
+  for (const id of ["member-dad", "member-kavi"]) {
+    assert.equal(recipientsForGroups(DEMO_MEMBERS, ["friends", "colleagues"]).includes(id), false);
+  }
+  assert.deepEqual(recipientsForGroups(DEMO_MEMBERS, ["friends"]), ["member-rohan", "member-isha", "member-karan", "member-neha"]);
+  assert.equal(recipientsForGroups(DEMO_MEMBERS, ["family", "friends", "colleagues"]).length, DEMO_MEMBERS.length);
+  assert.deepEqual(recipientsForGroups(DEMO_MEMBERS, []), []);
+  assert.deepEqual(membersInGroups(DEMO_MEMBERS, DEFAULT_GROUP_IDS).map((member) => member.id), family);
+  // Members saved before groups existed count as family.
+  assert.equal(groupOf({}), "family");
+  assert.equal(isGroupId("friends"), true);
+  assert.equal(isGroupId("enemies"), false);
 });
 
 test("viewer summary and default recipients match the demo group", () => {
@@ -183,13 +202,13 @@ test("viewer summary and default recipients match the demo group", () => {
   assert.equal(summarizeViewers([], templates), "");
   assert.equal(summarizeViewers(["Dad"], templates), "Dad");
   assert.equal(summarizeViewers(["Dad", "Kavi Goutam"], templates), "Dad & Kavi");
-  assert.equal(summarizeViewers(DEMO_MEMBERS.map((member) => member.name), templates), "Dad, Kavi +2");
-  // The demo journey is viewed by Dad, Kavi Goutam and Niara.
+  assert.equal(summarizeViewers(DEMO_MEMBERS.map((member) => member.name), templates), "Dad, Kavi +11");
+  // The demo journey is shared with Family by default: Dad, Kavi, Mom, Aarav and Meera.
   const viewers = defaultRecipients(DEMO_MEMBERS);
-  assert.deepEqual(viewers, ["member-dad", "member-kavi", "member-niara"]);
+  assert.deepEqual(viewers, recipientsForGroups(DEMO_MEMBERS, DEFAULT_GROUP_IDS));
   const viewerNames = DEMO_MEMBERS.filter((member) => viewers.includes(member.id)).map((member) => member.name);
-  assert.equal(summarizeViewers(viewerNames, templates), "Dad, Kavi +1");
-  assert.equal(templates.more.length > 0 && `${summarizeViewers(viewerNames, templates)} can view this journey`, "Dad, Kavi +1 can view this journey");
+  assert.equal(summarizeViewers(viewerNames, templates), "Dad, Kavi +3");
+  assert.equal(templates.more.length > 0 && `${summarizeViewers(viewerNames, templates)} can view this journey`, "Dad, Kavi +3 can view this journey");
   assert.deepEqual(defaultRecipients(DEMO_MEMBERS.map((member) => ({ ...member, shareByDefault: false }))), DEMO_MEMBERS.map((member) => member.id));
   assert.equal(initialsFor("Kavi Goutam"), "KG");
 });
@@ -327,4 +346,23 @@ test("alerts include location link, ride, plate and nearest help", () => {
   assert.equal(formatDistance(1_540), "1.5 km");
   assert.match(directionsLink(location, "Police & Co", true), /^geo:.+\(Police%20%26%20Co\)$/u);
   assert.match(directionsLink(location, "x", false), /^https:\/\/www\.openstreetmap\.org\/directions/u);
+});
+
+test("group chat seeds every group and appends trimmed messages", () => {
+  const now = Date.UTC(2026, 9, 30, 12);
+  const log = seedChat(now);
+  assert.equal(isChatLog(log), true);
+  assert.ok(log.family.length > 0 && log.friends.length > 0 && log.colleagues.length > 0);
+  assert.ok(log.family.every((message) => message.groupId === "family" && message.at < now));
+  // Seeded senders belong to the group they wrote in (or are the rider).
+  for (const [groupId, messages] of Object.entries(log)) {
+    const ids = new Set(recipientsForGroups(DEMO_MEMBERS, [groupId as "family"]));
+    assert.ok(messages.every((message) => message.senderId === ME || ids.has(message.senderId)), groupId);
+  }
+  const next = appendMessage(log, { id: "m1", groupId: "friends", senderId: "member-rohan", text: "  On my way  ", at: now });
+  assert.equal(next.friends.at(-1)?.text, "On my way");
+  assert.equal(next.friends.at(-1)?.senderId, "member-rohan");
+  assert.equal(next.family, log.family);
+  assert.equal(appendMessage(log, { id: "m2", groupId: "friends", senderId: ME, text: "   ", at: now }), log);
+  assert.equal(isChatLog({ family: [] }), false);
 });

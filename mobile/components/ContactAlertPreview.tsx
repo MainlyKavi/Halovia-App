@@ -1,35 +1,38 @@
-import { Bell, MapPinned, Phone, Shield, X } from "lucide-react";
+import { Bell, ChevronRight, MapPinned, Phone, Shield, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { DEMO_PICKUP } from "@/lib/ride/ride-provider";
 import { playSound, stopSound } from "../audio";
 import { SosMap } from "../cloud/SosMap";
+import { vibrate } from "../native";
 import { useSafety } from "../state";
+import { CountdownOverlay, FullScreenOverlay } from "./FullScreen";
 
-const COUNTDOWN_SECONDS = 5;
+/** Same cancel window as SOS. */
+export const CONTACT_ALERT_COUNTDOWN_MS = 3_000;
 
 /**
  * Demo only: shows what a trusted contact's phone shows when this phone goes
- * quiet, so one device can present both sides. Starts a 5 second countdown,
- * then opens a full-screen loud alert with the last known location and ride.
- * Calls are never placed.
+ * quiet, so one device can present both sides. Starts a 3 second countdown
+ * (cancellable), then opens a full-screen loud alert with the last known
+ * location and ride. Calls are never placed.
  */
 export function ContactAlertPreview() {
   const { t, settings, session, gps, showToast } = useSafety();
-  const [left, setLeft] = useState<number | null>(null);
-  const [open, setOpen] = useState(false);
+  const [endsAt, setEndsAt] = useState<number | null>(null);
+  const [openedAt, setOpenedAt] = useState<number | null>(null);
 
   useEffect(() => {
-    if (left === null) return;
-    if (left <= 0) { setLeft(null); setOpen(true); return; }
-    const timer = window.setTimeout(() => setLeft(left - 1), 1_000);
+    if (endsAt === null) return;
+    const timer = window.setTimeout(() => { setEndsAt(null); setOpenedAt(Date.now()); }, Math.max(0, endsAt - Date.now()));
     return () => window.clearTimeout(timer);
-  }, [left]);
+  }, [endsAt]);
 
   useEffect(() => {
-    if (!open) return;
+    if (openedAt === null) return;
     playSound("alarm");
+    void vibrate("sos");
     return () => stopSound();
-  }, [open]);
+  }, [openedAt]);
 
   if (!settings.demoMode) return null;
 
@@ -37,34 +40,55 @@ export function ContactAlertPreview() {
   const name = settings.userName || "Shreya";
   const first = name.split(" ")[0];
   const point = gps?.point ?? ride?.pickup.location ?? DEMO_PICKUP.location;
-  const at = Date.now();
-  const location = { lat: point.lat, lng: point.lng, accuracy: null, at };
   const simulated = () => showToast(t("preview.simulatedCall"), "warning");
+  const start = () => { void vibrate("warning"); setEndsAt(Date.now() + CONTACT_ALERT_COUNTDOWN_MS); };
+  const cancel = () => { setEndsAt(null); showToast(t("preview.cancelled")); };
 
   return (
     <>
-      <button type="button" className="m-text-link" onClick={() => setLeft(COUNTDOWN_SECONDS)} disabled={left !== null || open}>
-        <Bell size={16} />{left === null ? t("preview.start") : t("preview.counting", { seconds: left })}
+      <button type="button" className="m-text-link" onClick={start} disabled={endsAt !== null || openedAt !== null}>
+        <Bell size={16} />{t("preview.start")}
       </button>
-      {open && (
-        <div className="m-sos-overlay m-preview-alert" role="alertdialog" aria-modal="true" aria-labelledby="preview-title">
-          <span className="m-preview-chip"><Bell size={14} />{t("preview.loud")}</span>
-          <h2 id="preview-title">{t("preview.title", { name: first })}</h2>
-          <p>{t("preview.lastKnown", { time: new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) })}</p>
-          <SosMap location={location} trail={[]} name={name} dark={settings.theme === "dark"} offlineLabel={t("track.mapOffline")} />
-          {ride && (
-            <div className="m-preview-ride">
-              <strong>{t("preview.driver", { name: ride.driver.name })}</strong> · {ride.vehicle.colour} {ride.vehicle.model}
-              <br />{ride.vehicle.plate} · {ride.pickup.label} → {ride.drop.label}
+      {endsAt !== null && (
+        <CountdownOverlay
+          id="preview-countdown"
+          endsAt={endsAt}
+          durationMs={CONTACT_ALERT_COUNTDOWN_MS}
+          title={(seconds) => t("preview.countdownTitle", { seconds })}
+          text={t("preview.countdownText")}
+          cancelLabel={t("preview.cancel")}
+          onCancel={cancel}
+        />
+      )}
+      {openedAt !== null && (
+        <FullScreenOverlay className="m-sos-overlay m-preview-alert" labelledBy="preview-title">
+          <div className="m-preview-inner">
+            <span className="m-preview-chip"><Bell size={14} />{t("preview.loud")}</span>
+            <h2 id="preview-title">{t("preview.title", { name: first })}</h2>
+            <p>{t("preview.lastKnown", { time: new Date(openedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }) })}</p>
+            <SosMap location={{ lat: point.lat, lng: point.lng, accuracy: null, at: openedAt }} trail={[]} name={name} dark={settings.theme === "dark"} offlineLabel={t("track.mapOffline")} />
+            {ride && (
+              <div className="m-preview-ride">
+                <strong>{t("preview.driver", { name: ride.driver.name })}</strong> · {ride.vehicle.colour} {ride.vehicle.model}
+                <br />{ride.vehicle.plate} · {ride.pickup.label} → {ride.drop.label}
+              </div>
+            )}
+            <div className="m-alert-actions">
+              <button type="button" className="m-premium-btn m-premium-primary" onClick={simulated} data-autofocus>
+                <span className="m-premium-icon"><Phone size={20} /></span><span>{t("live.alert.call", { name: first })}</span><ChevronRight size={18} className="m-premium-chevron" />
+              </button>
+              <div className="m-alert-actions-row">
+                <button type="button" className="m-premium-btn m-premium-glass" onClick={simulated}>
+                  <span className="m-premium-icon"><Shield size={18} /></span><span>{t("preview.police")}</span>
+                </button>
+                <button type="button" className="m-premium-btn m-premium-glass" onClick={simulated}>
+                  <span className="m-premium-icon"><MapPinned size={18} /></span><span>{t("live.alert.openMaps")}</span>
+                </button>
+              </div>
+              <button type="button" className="m-premium-btn m-premium-quiet" onClick={() => setOpenedAt(null)}><X size={16} />{t("preview.close")}</button>
             </div>
-          )}
-          <div className="m-sos-actions">
-            <button type="button" className="m-sos-white" onClick={simulated}><Phone size={18} />{t("live.alert.call", { name: first })}</button>
-            <button type="button" className="m-sos-ghost" onClick={simulated}><Shield size={18} />{t("preview.police")}</button>
-            <button type="button" className="m-sos-ghost" onClick={simulated}><MapPinned size={18} />{t("live.alert.openMaps")}</button>
-            <button type="button" className="m-sos-link" onClick={() => setOpen(false)}><X size={16} />{t("preview.close")}</button>
           </div>
-        </div>
+        </FullScreenOverlay>
       )}
     </>
   );

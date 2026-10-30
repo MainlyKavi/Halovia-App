@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowRight } from "lucide-react";
+import { ChevronRight, Siren } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { unlockAudio } from "../audio";
 import { vibrate } from "../native";
@@ -75,13 +75,15 @@ export function SosButton({ label, hint, ariaLabel, disabled, onTrigger }: { lab
         onKeyDown={onKeyDown}
         onContextMenu={(event) => event.preventDefault()}
       >
+        <span className="m-help-sheen" aria-hidden="true" />
         <span className="m-help-fill" style={{ transform: `scaleX(${progress})` }} aria-hidden="true" />
-        <span className="m-help-icon" aria-hidden="true"><AlertTriangle size={34} strokeWidth={2.4} fill="currentColor" stroke="var(--help-a)" /></span>
-        <span className="m-help-divider" aria-hidden="true" />
-        <strong className="m-help-label">{label}</strong>
-        <ArrowRight className="m-help-arrow" size={24} aria-hidden="true" />
+        <span className="m-help-icon" aria-hidden="true"><Siren size={30} strokeWidth={2.1} /></span>
+        <span className="m-help-text" aria-hidden="true">
+          <strong className="m-help-label">{label}</strong>
+          <small className="m-help-hint">{hint}</small>
+        </span>
+        <span className="m-help-go" aria-hidden="true"><ChevronRight size={22} strokeWidth={2.4} /></span>
       </button>
-      <p className="m-help-hint">{hint}</p>
     </div>
   );
 }
