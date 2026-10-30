@@ -7,6 +7,7 @@ import { defaultRecipients, summarizeViewers } from "@/lib/ride/group";
 import { brandLabel } from "@/lib/ride/ride-provider";
 import { FALLBACK_PLANNED_ROUTE } from "@/lib/ride/route";
 import { LiveMap } from "../components/LiveMap";
+import { ContactAlertPreview } from "../components/ContactAlertPreview";
 import { SosButton } from "../components/SosButton";
 import { useSafety } from "../state";
 
@@ -67,6 +68,7 @@ export function HomeScreen() {
       <div className="m-home-links">
         <button type="button" className="m-text-link" onClick={() => navigate("emergency")}><Phone size={16} />{t("home.emergencyNumbers")}</button>
         {settings.devTools && <button type="button" className="m-text-link" onClick={() => navigate("script")}><ListChecks size={16} />{t("home.demoScript")}</button>}
+        <ContactAlertPreview />
       </div>
     </div>
   );

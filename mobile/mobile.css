@@ -585,3 +585,8 @@ body { background: var(--app-bg) fixed; }
 .map-sos-person i { position: absolute; left: 50%; top: 50%; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; background: rgba(215,38,61,.35); animation: m-loc-pulse 1.6s ease-out infinite; }
 .m-live-banner { position: fixed; z-index: 85; left: 1rem; right: 1rem; top: calc(var(--safe-top, 0px) + .6rem); display: flex; align-items: center; justify-content: center; gap: .5rem; min-height: 52px; border: 0; border-radius: 16px; background: var(--sos); color: white; font-weight: 780; box-shadow: 0 8px 24px rgba(200,30,58,.4); }
 @media (prefers-reduced-motion: reduce) { .map-sos-person i { animation: none; } }
+
+.m-preview-alert { z-index: 95; align-content: start; background: #4a3a3f; }
+.m-preview-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .3rem .7rem; border-radius: 999px; background: rgba(255,255,255,.16); font-size: .8rem; font-weight: 700; }
+.m-preview-alert h2 { font-size: 1.9rem; max-width: 14ch; }
+.m-preview-ride { width: min(420px, 100%); text-align: start; padding: .8rem 1rem; border-radius: 16px; background: rgba(255,255,255,.12); font-size: .9rem; line-height: 1.5; }
